@@ -1,0 +1,121 @@
+---
+- name: Investigating VBoxGuestAdditions on the system
+  block:
+    - name: Check for previously installed VBoxGuestAdditions
+      shell: lsmod | grep -o vboxguest
+      register: vbox_guest_module_installed
+      changed_when: false
+
+    - name: Check VBoxGuestAdditions installed version
+      shell:
+        modinfo vboxguest |
+        egrep -o "^version\:\s+([0-9]+\.[0-9]+\.[0-9]+)" |
+        egrep -o "([0-9]+\.[0-9]+\.[0-9])"
+      register: vbox_guest_module_version
+      changed_when: false
+      when: vbox_guest_module_installed.stdout == "vboxguest"
+  ignore_errors: true
+
+
+- name: Install build dependencies
+  block:
+    - name: Add packages prerequisite repos
+      yum:
+        name: "{{ vbox_guestadditions_prerequisite_repos }}"
+        state: present
+      register: repos_added
+
+    - name: Update package repos
+      yum:
+        name: "*"
+        state: latest
+
+    - name: Install the essential packages
+      yum:
+        name: "{{ vbox_guestadditions_dependency_packages }}"
+        state: present
+      register: packages_installed
+
+    - name: Reboot machine in order for newly loaded kernel headers to take effect
+      reboot:
+        msg: Rebooting...
+      when: packages_installed is changed and reboot_after_kernel_headers_load
+  when: not vbox_guest_module_installed.stdout or
+        (vbox_guest_module_installed.stdout == "vboxguest" and
+          vbox_guest_module_version is defined and
+          vbox_guest_module_version.stdout != vbox_version) or
+        vbox_guest_module_version.stderr == 'modinfo:' ~ ' ERROR:' ~ ' Module vboxguest not found.'
+
+- name: Download and mount VBoxGuestAdditions
+  block:
+    - name: Download the appropriate VBoxGuestAdditions iSO file
+      get_url:
+        url: "{{ vbox_guestadditions_download_link }}"
+        dest: /tmp/
+
+    - name: Mount VBOX Guest Additions ISO Image
+      mount:
+        path: /media/VBoxGuestAdditions
+        src: /tmp/VBoxGuestAdditions_{{ vbox_version }}.iso
+        opts: loop,ro
+        fstype: iso9660
+        state: mounted
+      register: vboxguest_mounted
+  when: not vbox_guest_module_installed.stdout or
+        (vbox_guest_module_installed.stdout == "vboxguest" and
+          vbox_guest_module_version is defined and
+          vbox_guest_module_version.stdout != vbox_version) or
+        vbox_guest_module_version.stderr == 'modinfo:' ~ ' ERROR:' ~ ' Module vboxguest not found.'
+
+- name: Install/Upgrade/Fix VBoxGuestAdditions
+  block:
+    - name: Install VBoxGuestAdditions
+      shell: echo "yes" | /bin/sh /media/VBoxGuestAdditions/VBoxLinuxAdditions.run
+      register: vboxguest_installation
+      when: not vbox_guest_module_installed.stdout
+      notify:
+        - Reboot the machine
+
+    - name: Upgrade/Fix installed VBoxGuestAdditions
+      shell: echo "yes" | /bin/sh /media/VBoxGuestAdditions/VBoxLinuxAdditions.run
+      when: vboxguest_installation is not changed and
+            (not vbox_guest_module_installed.stdout or
+                    (vbox_guest_module_installed.stdout == "vboxguest" and
+                      vbox_guest_module_version is defined and
+                      vbox_guest_module_version.stdout != vbox_version) or
+                    vbox_guest_module_version.stderr == 'modinfo:' ~ ' ERROR:' ~ ' Module vboxguest not found.')
+      register: upgrade_results
+      ignore_errors: true
+      failed_when: upgrade_results.rc == 1 or upgrade_results.rc > 2
+      notify:
+        - Reboot the machine
+  when: vboxguest_mounted is changed or vboxguest_mounted is succeeded
+
+- name: Unmount and remove VBoxGuestAdditions image
+  block:
+    - name: Unmount VBoxGuestAdditions drive
+      mount:
+        path: /media/VBoxGuestAdditions
+        src: /tmp/VBoxGuestAdditions_{{ vbox_version }}.iso
+        fstype: iso9660
+        state: absent
+
+    - name: Remove the downloaded VBoxGuestAdditions ISO file
+      file:
+        path: /tmp/VBoxGuestAdditions_{{ vbox_version }}.iso
+        state: absent
+  when: vboxguest_mounted is changed or vboxguest_mounted is succeeded
+
+- name: Housekeeping...
+  block:
+    - name: Remove packages prerequisite added repos
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items: "{{ vbox_guestadditions_prerequisite_repo_files }}"
+
+    - name: Remove installed packages
+      yum:
+        name: "{{ vbox_guestadditions_dependency_packages }}"
+        state: absent
+  when: remove_installed_vbox_guestadditions_dependency_packages

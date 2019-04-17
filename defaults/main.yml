@@ -1,0 +1,23 @@
+---
+vbox_version: 6.0.4
+vbox_guestadditions_download_link: http://download.virtualbox.org/virtualbox/{{ vbox_version }}/VBoxGuestAdditions_{{ vbox_version }}.iso
+
+remove_installed_vbox_guestadditions_dependency_packages: true
+reboot_after_kernel_headers_load: true
+
+vbox_guestadditions_prerequisite_repos:
+  - https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+  - http://download-ib01.fedoraproject.org/pub/epel/7/x86_64/Packages/d/dkms-2.6.1-1.el7.noarch.rpm
+
+vbox_guestadditions_prerequisite_repo_files:
+  - /etc/yum.repos.d/epel.repo
+  - /etc/yum.repos.d/epel-testing.repo
+
+vbox_guestadditions_dependency_packages:
+  - perl
+  - gcc
+  - kernel-devel
+  - kernel-headers
+  - make
+  - bzip2
+  - dkms
