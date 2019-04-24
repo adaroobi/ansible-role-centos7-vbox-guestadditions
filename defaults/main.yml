@@ -10,8 +10,6 @@ vbox_guestadditions_prerequisite_repos:
   - http://download-ib01.fedoraproject.org/pub/epel/7/x86_64/Packages/d/dkms-2.6.1-1.el7.noarch.rpm
 
 vbox_guestadditions_prerequisite_repo_files:
-  - /etc/yum.repos.d/epel.repo
-  - /etc/yum.repos.d/epel-testing.repo
 
 vbox_guestadditions_dependency_packages:
   - perl
